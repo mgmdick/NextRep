@@ -11,11 +11,11 @@ hevy_api_key = st.secrets["api_keys"]["hevy"]
 client = OpenAI(api_key=openai_api_key)
 
 # App layout
-st.set_page_config(page_title="Hevy Chat Analyzer", page_icon="💪", layout="centered")
+st.set_page_config(page_title="Matt's Hevy Analyzer", page_icon="💪", layout="centered")
 st.title("💪 Hevy Chat Analyzer")
 
 st.markdown(
-    "Fetch your latest **Hevy workouts** and receive an **AI-powered personalized analysis** "
+    "Fetch Matt's latest **Hevy workouts** and receive an **AI-powered personalized analysis** "
     "to improve your training instantly."
 )
 
