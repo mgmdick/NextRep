@@ -68,13 +68,8 @@ if st.button("🚀 Fetch & Analyze Workouts"):
                 f"'{workout_title}' on {start_dt.strftime('%Y-%m-%d')}: " + ", ".join(exercise_summaries[:6])
             )
         st.success(f"✅ {len(workouts)} Workouts fetched successfully!")
-        st.subheader("📋 Workouts Summary")
-        for i, s in enumerate(summaries):
-            st.markdown(f"**{i+1}. {s['title']}**  ")
-            st.markdown(f"Date: {s['date']} | Duration: {s['duration']} min")
-            st.markdown("Exercises: " + ", ".join(s['exercises']))
-            with st.expander(f"🔍 View Raw JSON for Workout {i+1} (optional)"):
-                st.json(s['raw'])
+        # Move AI analysis above the summaries
+        st.subheader("🤖 Your Personalized AI Feedback")
         # AI prompt for all workouts
         ai_prompt = (
             f"You are an experienced personal trainer. Here are the user's last {len(workouts)} workouts: "
@@ -88,10 +83,45 @@ if st.button("🚀 Fetch & Analyze Workouts"):
                 messages=[{"role": "user", "content": ai_prompt}]
             )
             analysis = completion.choices[0].message.content
-        st.success("✅ AI Analysis Ready!")
-        st.subheader("🤖 Your Personalized AI Feedback")
-        st.markdown(analysis)
+        # Store results in session_state
+        st.session_state['workouts'] = summaries
+        st.session_state['analysis'] = analysis
+        st.session_state['last_analysis'] = analysis
+        st.session_state['chat_history'] = [
+            {"role": "assistant", "content": analysis}
+        ]
     else:
         st.error("❌ No workout data received. Please check your Hevy API key or your recent workouts.")
 
-st.markdown("---")
+# Only show AI/chat/workouts if analysis exists in session_state
+if 'analysis' in st.session_state:
+    st.subheader("🤖 Your Personalized AI Feedback")
+    st.markdown(st.session_state['analysis'])
+    st.markdown("---")
+    st.subheader("💬 Continue the Conversation")
+    # Handle chat input and response before rendering chat history
+    user_input = st.chat_input("Ask a follow-up question about your workouts...", key="workout_chat")
+    if user_input:
+        st.session_state['chat_history'].append({"role": "user", "content": user_input})
+        with st.spinner("AI is thinking..."):
+            chat_response = client.chat.completions.create(
+                model="gpt-4.1-nano",
+                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state['chat_history']]
+            )
+            ai_reply = chat_response.choices[0].message.content
+        st.session_state['chat_history'].append({"role": "assistant", "content": ai_reply})
+    # Now render the full chat history (including new response)
+    for msg in st.session_state['chat_history']:
+        if msg["role"] == "user":
+            st.markdown(f"**You:** {msg['content']}")
+        else:
+            st.markdown(f"**AI:** {msg['content']}")
+    st.markdown("---")
+    # Collapse the workouts summary in an expander
+    with st.expander("📋 Workouts Summary", expanded=False):
+        for i, s in enumerate(st.session_state['workouts']):
+            st.markdown(f"**{i+1}. {s['title']}**  ")
+            st.markdown(f"Date: {s['date']} | Duration: {s['duration']} min")
+            st.markdown("Exercises: " + ", ".join(s['exercises']))
+            with st.expander(f"🔍 View Raw JSON for Workout {i+1} (optional)"):
+                st.json(s['raw'])
