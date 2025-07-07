@@ -11,9 +11,42 @@ hevy_api_key = st.secrets["api_keys"]["hevy"]
 client = OpenAI(api_key=openai_api_key)
 
 # App layout
-st.set_page_config(page_title="Matt's Hevy Analyzer", page_icon="💪", layout="centered")
-st.title("💪 Matt's Hevy Analyzer")
+st.set_page_config(page_title="Matt's Hevy Analyzer", page_icon="💪", layout="wide")
+# Mobile-friendly CSS tweaks
+st.markdown("""
+    <style>
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        max-width: 100vw;
+    }
+    .stButton>button, .stTextInput>div>input {
+        min-height: 48px;
+        font-size: 1.1rem;
+    }
+    .stExpanderHeader {
+        font-size: 1.1rem;
+    }
+    @media (max-width: 600px) {
+        .block-container {
+            padding-left: 0.2rem;
+            padding-right: 0.2rem;
+        }
+        .stExpanderHeader {
+            font-size: 1rem;
+        }
+        .stButton>button, .stTextInput>div>input {
+            min-height: 44px;
+            font-size: 1rem;
+        }
+    }
+    </style>
+""", unsafe_allow_html=True)
 
+# Title and description
+st.title("💪 Matt's Hevy Analyzer")
 st.markdown(
     "Fetch Matt's latest **Hevy workouts** and receive an **AI-powered personalized analysis** "
     "to improve your training instantly."
