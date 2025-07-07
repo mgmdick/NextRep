@@ -5,7 +5,15 @@ from datetime import datetime
 
 # Load secrets
 openai_api_key = st.secrets["api_keys"]["openai"]
-hevy_api_key = st.secrets["api_keys"]["hevy"]
+
+# Secure Hevy API key input (default to your secret, but user can override)
+default_hevy_key = st.secrets["api_keys"]["hevy"] if "api_keys" in st.secrets and "hevy" in st.secrets["api_keys"] else ""
+hevy_api_key = st.text_input(
+    "Enter your Hevy API key (leave as default for Matt)",
+    value=default_hevy_key,
+    type="password",
+    help="Your key is only used for this session and never stored."
+)
 
 # Initialize OpenAI client
 client = OpenAI(api_key=openai_api_key)
@@ -57,6 +65,20 @@ num_workouts = st.number_input(
     "How many recent workouts to analyze?", min_value=1, max_value=20, value=5, step=1
 )
 
+# Coach persona selection
+coach_persona = st.selectbox(
+    "Choose your coach's focus:",
+    [
+        "Motivational",
+        "Technical",
+        "Hypertrophy",
+        "Endurance",
+        "Strength"
+    ],
+    index=0,
+    help="Select the style and focus of your AI feedback."
+)
+
 if st.button("🚀 Fetch & Analyze Workouts"):
     with st.spinner(f"Fetching your last {num_workouts} workouts from Hevy..."):
         response = requests.get(
@@ -104,8 +126,17 @@ if st.button("🚀 Fetch & Analyze Workouts"):
         # Move AI analysis above the summaries
         st.subheader("🤖 Your Personalized AI Feedback")
         # AI prompt for all workouts
+        persona_instructions = {
+            "Motivational": "Be highly encouraging and focus on mindset, effort, and consistency.",
+            "Technical": "Give detailed, technical feedback on form, technique, and training principles.",
+            "Hypertrophy": "Focus on muscle growth, volume, and hypertrophy-specific advice.",
+            "Endurance": "Emphasize stamina, cardiovascular improvements, and endurance training tips.",
+            "Strength": "Highlight strength gains, progressive overload, and powerlifting principles."
+        }
+        persona_text = persona_instructions.get(coach_persona, "Be supportive and practical.")
         ai_prompt = (
-            f"You are an experienced personal trainer. Here are the user's last {len(workouts)} workouts: "
+            f"You are an experienced personal trainer with a {coach_persona.lower()} focus. {persona_text} "
+            f"Here are the user's last {len(workouts)} workouts: "
             + "; ".join(ai_summaries)
             + ". Give a motivating, clear analysis of the user's recent training, noting strengths and suggesting one actionable improvement for the next week. "
             "Keep the feedback short, practical, and encouraging. Focus on overall trends, and end with a suggested future workout plan. "
@@ -135,14 +166,17 @@ if 'analysis' in st.session_state:
     # Handle chat input and response before rendering chat history
     user_input = st.chat_input("Ask a follow-up question about your workouts...", key="workout_chat")
     if user_input:
-        st.session_state['chat_history'].append({"role": "user", "content": user_input})
-        with st.spinner("AI is thinking..."):
-            chat_response = client.chat.completions.create(
-                model="gpt-4.1-nano",
-                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state['chat_history']]
-            )
-            ai_reply = chat_response.choices[0].message.content
-        st.session_state['chat_history'].append({"role": "assistant", "content": ai_reply})
+        # Only process if this is a new message
+        if 'last_user_input' not in st.session_state or st.session_state['last_user_input'] != user_input:
+            st.session_state['chat_history'].append({"role": "user", "content": user_input})
+            with st.spinner("AI is thinking..."):
+                chat_response = client.chat.completions.create(
+                    model="gpt-4.1-nano",
+                    messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state['chat_history']]
+                )
+                ai_reply = chat_response.choices[0].message.content
+            st.session_state['chat_history'].append({"role": "assistant", "content": ai_reply})
+            st.session_state['last_user_input'] = user_input
     # Now render the full chat history (including new response)
     for msg in st.session_state['chat_history']:
         if msg["role"] == "user":
