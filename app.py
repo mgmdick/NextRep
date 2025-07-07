@@ -1,7 +1,6 @@
 import streamlit as st
-import requests
 from openai import OpenAI
-from datetime import datetime
+from utils import fetch_hevy_workouts, parse_workout_summary, build_ai_prompt
 
 # Load secrets
 openai_api_key = st.secrets["api_keys"]["openai"]
@@ -79,75 +78,33 @@ coach_persona = st.selectbox(
     help="Select the style and focus of your AI feedback."
 )
 
+# Advanced config for answer verbosity/detail
+with st.expander("⚙️ Advanced Config", expanded=False):
+    verbosity = st.selectbox(
+        "Answer verbosity/detail:",
+        ["Short", "Normal", "Detailed", "Very Detailed"],
+        index=1,
+        help="Control how much detail the AI gives in its feedback."
+    )
+
 if st.button("🚀 Fetch & Analyze Workouts"):
     with st.spinner(f"Fetching your last {num_workouts} workouts from Hevy..."):
-        response = requests.get(
-            f"https://api.hevyapp.com/v1/workouts?page=1&pageSize={num_workouts}",
-            headers={
-                'accept': 'application/json',
-                'api-key': hevy_api_key
-            }
-        )
-        data = response.json()
-
-    if data and data.get('workouts'):
-        workouts = data['workouts']
-        summaries = []
-        ai_summaries = []
-        for i, workout in enumerate(workouts):
-            workout_title = workout.get('title', 'Untitled Workout')
-            start_time = workout.get('start_time')
-            end_time = workout.get('end_time')
-            exercises = workout.get('exercises', [])
-            # Format readable date and duration
-            start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-            end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
-            duration = round((end_dt - start_dt).total_seconds() / 60, 1)
-            exercise_summaries = []
-            for ex in exercises:
-                ex_title = ex.get('title', 'Unnamed Exercise')
-                sets = ex.get('sets', [])
-                set_summaries = [f"{s.get('reps', '?')} reps @ {s.get('weight_kg', '?')} kg" for s in sets]
-                ex_summary = f"- **{ex_title}**: " + ", ".join(set_summaries[:3]) + (" ..." if len(set_summaries) > 3 else "")
-                exercise_summaries.append(f"{ex_title} ({len(sets)} sets)")
-            # For display
-            summaries.append({
-                'title': workout_title,
-                'date': start_dt.strftime('%Y-%m-%d %H:%M'),
-                'duration': duration,
-                'exercises': exercise_summaries,
-                'raw': workout
-            })
-            # For AI prompt
-            ai_summaries.append(
-                f"'{workout_title}' on {start_dt.strftime('%Y-%m-%d')}: " + ", ".join(exercise_summaries[:6])
-            )
+        workouts = fetch_hevy_workouts(hevy_api_key, num_workouts)
+    if workouts:
+        summaries = [parse_workout_summary(w) for w in workouts]
+        ai_summaries = [
+            f"'{s['title']}' on {s['date'].split()[0]}: " + ", ".join(s['exercises'][:6])
+            for s in summaries
+        ]
         st.success(f"✅ {len(workouts)} Workouts fetched successfully!")
-        # Move AI analysis above the summaries
         st.subheader("🤖 Your Personalized AI Feedback")
-        # AI prompt for all workouts
-        persona_instructions = {
-            "Motivational": "Be highly encouraging and focus on mindset, effort, and consistency.",
-            "Technical": "Give detailed, technical feedback on form, technique, and training principles.",
-            "Hypertrophy": "Focus on muscle growth, volume, and hypertrophy-specific advice.",
-            "Endurance": "Emphasize stamina, cardiovascular improvements, and endurance training tips.",
-            "Strength": "Highlight strength gains, progressive overload, and powerlifting principles."
-        }
-        persona_text = persona_instructions.get(coach_persona, "Be supportive and practical.")
-        ai_prompt = (
-            f"You are an experienced personal trainer with a {coach_persona.lower()} focus. {persona_text} "
-            f"Here are the user's last {len(workouts)} workouts: "
-            + "; ".join(ai_summaries)
-            + ". Give a motivating, clear analysis of the user's recent training, noting strengths and suggesting one actionable improvement for the next week. "
-            "Keep the feedback short, practical, and encouraging. Focus on overall trends, and end with a suggested future workout plan. "
-        )
+        ai_prompt = build_ai_prompt(workouts, ai_summaries, coach_persona, verbosity)
         with st.spinner("Analyzing workouts with AI..."):
             completion = client.chat.completions.create(
                 model="gpt-4.1-nano",
                 messages=[{"role": "user", "content": ai_prompt}]
             )
             analysis = completion.choices[0].message.content
-        # Store results in session_state
         st.session_state['workouts'] = summaries
         st.session_state['analysis'] = analysis
         st.session_state['last_analysis'] = analysis
